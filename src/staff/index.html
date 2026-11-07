@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rebook staff dashboard</title>
+<style>
+:root { font: 14px/1.45 system-ui, "Segoe UI", Arial, sans-serif; color: #202924; background: #f2f4f0; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; border: 1px solid #ccd7ce; background: white; border-radius: 7px; padding: 7px 11px; color: #24372c; }
+button:hover { border-color: #087352; }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: #087352; border-color: #087352; color: white; font-weight: 600; }
+input, select, textarea { border: 1px solid #ccd7ce; border-radius: 7px; padding: 7px 9px; background: white; color: #202924; min-width: 0; }
+textarea { resize: vertical; width: 100%; }
+label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 12px; color: #4b5d51; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 22px; background: #123c2c; color: white; }
+header h1 { margin: 0; font-size: 20px; }
+header small { color: #b8d2c2; font-size: 12px; }
+nav { display: flex; gap: 6px; padding: 10px 22px; background: white; border-bottom: 1px solid #dce4dc; overflow-x: auto; }
+nav button { border: 0; border-radius: 6px; white-space: nowrap; }
+nav button.active { background: #dbefe3; color: #075a3f; font-weight: 700; }
+main { padding: 18px 22px 36px; max-width: 1440px; margin: auto; }
+.notice { padding: 9px 22px; color: #704a05; background: #fff0c8; }
+#error { color: #a12525; background: #ffe2df; }
+[hidden] { display: none !important; }
+.tab { display: none; }
+.tab.active { display: block; }
+.layout { display: grid; grid-template-columns: minmax(240px, 340px) minmax(0, 1fr); gap: 16px; min-height: 65vh; }
+.panel { background: white; border: 1px solid #dae3da; border-radius: 11px; overflow: hidden; }
+.panel h2 { margin: 0; padding: 13px 15px; border-bottom: 1px solid #e4eae4; font-size: 16px; }
+.panel-body { padding: 15px; }
+.muted { color: #617267; }
+.list { max-height: 68vh; overflow: auto; }
+.person { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid #edf1ed; border-radius: 0; padding: 12px 15px; }
+.person.selected { background: #e1f2e8; }
+.person b, .person span { display: block; }
+.person span { color: #65766a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pill { display: inline-block; border-radius: 99px; padding: 2px 7px; font-size: 11px; font-weight: 700; background: #e1f2e8; color: #086a4a; }
+.pill.warn { background: #fff0ca; color: #815705; }
+.thread { display: flex; flex-direction: column; gap: 8px; min-height: 250px; max-height: 48vh; overflow: auto; padding: 15px; background: #f6f8f4; }
+.bubble { max-width: 80%; align-self: flex-start; padding: 8px 11px; border-radius: 10px; background: white; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bubble.in { align-self: flex-end; background: #d8efe1; }
+.bubble small { display: block; color: #66766c; margin-bottom: 3px; }
+.reply { display: flex; flex-direction: column; gap: 8px; padding: 15px; border-top: 1px solid #e4eae4; }
+.row { display: flex; flex-wrap: wrap; align-items: end; gap: 9px; }
+.row > label { min-width: 160px; }
+.row > button { align-self: end; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.card { border: 1px solid #dde5dd; border-radius: 9px; padding: 13px; background: white; display: flex; flex-direction: column; gap: 8px; }
+.card h3 { margin: 0; font-size: 15px; }
+.card p { margin: 0; }
+.card .row { margin-top: auto; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.section-heading { margin: 0 0 10px; font-size: 18px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 9px 11px; border-bottom: 1px solid #e7ece7; }
+th { color: #5a6c5e; font-size: 12px; }
+.price-form { display: flex; align-items: center; gap: 8px; }
+.price-form input { width: 110px; }
+@media (max-width: 800px) { .layout { grid-template-columns: 1fr; } .list { max-height: 230px; } main { padding: 12px; } header, nav, .notice { padding-left: 12px; padding-right: 12px; } }
+</style>
+</head>
+<body>
+<header><div><h1>Staff dashboard</h1><small id="salon"></small></div><span id="timezone"></span><button type="button" id="refresh">Refresh</button></header>
+<div class="notice">Local dry run: replies are saved here and printed in the terminal. WhatsApp sending is not connected yet.</div>
+<div class="notice" id="error" role="alert" hidden></div>
+<nav aria-label="Dashboard sections">
+  <button type="button" class="active" data-tab="inbox">Inbox</button>
+  <button type="button" data-tab="bookings">Bookings</button>
+  <button type="button" data-tab="availability">Availability</button>
+  <button type="button" data-tab="pricing">Pricing</button>
+</nav>
+<main>
+  <section class="tab active" id="inbox">
+    <div class="layout">
+      <div class="panel"><h2>Conversations <span id="inbox-count"></span></h2><div class="list" id="people"></div></div>
+      <div class="panel">
+        <h2 id="conversation-title">Select a conversation</h2>
+        <div class="thread" id="thread"><p class="muted">Choose a customer to see their messages.</p></div>
+        <form class="reply" id="reply-form" hidden>
+          <label>Staff reply<textarea id="reply-text" rows="3" maxlength="2000" placeholder="Type a reply as staff" required></textarea></label>
+          <div class="row"><button class="primary" type="submit">Send staff reply</button><button type="button" id="release" hidden>Close handoff and return to assistant</button></div>
+        </form>
+      </div>
+    </div>
+  </section>
+  <section class="tab" id="bookings">
+    <div class="stack">
+      <div><h2 class="section-heading">Booking requests</h2><div class="cards" id="requests"></div></div>
+      <div><h2 class="section-heading">Recorded appointments</h2><div class="panel table-wrap"><table><thead><tr><th>Customer</th><th>Service</th><th>Starts</th><th>Ends</th></tr></thead><tbody id="appointments"></tbody></table></div></div>
+    </div>
+  </section>
+  <section class="tab" id="availability">
+    <div class="stack">
+      <div class="panel"><h2>Add availability</h2><form class="panel-body row" id="slot-form">
+        <label>Service<select id="slot-service" required></select></label>
+        <label>Start (salon time)<input id="slot-start" type="datetime-local" required></label>
+        <label>End (salon time)<input id="slot-end" type="datetime-local" required></label>
+        <button class="primary" type="submit">Add slot</button>
+      </form></div>
+      <div><h2 class="section-heading">Availability slots</h2><div class="panel table-wrap"><table><thead><tr><th>Service</th><th>Starts</th><th>Ends</th><th>Status</th><th></th></tr></thead><tbody id="slots"></tbody></table></div></div>
+    </div>
+  </section>
+  <section class="tab" id="pricing">
+    <div class="panel"><h2>Service pricing</h2><div class="table-wrap"><table><thead><tr><th>Service</th><th>Duration</th><th>Current AED price</th></tr></thead><tbody id="prices"></tbody></table></div></div>
+    <p class="muted">Saved prices are used in new assistant replies and price checks. Changes here do not edit the salon profile file.</p>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const node = (tag, text, className) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e; };
+let state = null;
+let selected = null;
+let pending = false;
+
+async function api(path, body) {
+  const res = await fetch("__API_BASE__" + path, body === undefined ? undefined : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+function error(message) { $("error").textContent = message || ""; $("error").hidden = !message; }
+async function act(path, body) {
+  if (pending) return;
+  pending = true;
+  error("");
+  try { render(await api(path, body)); if (selected) await openConversation(selected); }
+  catch (e) { error(e.message); }
+  finally { pending = false; }
+}
+function serviceName(id) { return state.services.find(s => s.id === id)?.name_en || id || "Service to confirm"; }
+function customerName(row) { return row.first_name || row.phone; }
+function showTab(name) {
+  for (const b of document.querySelectorAll("nav button")) b.classList.toggle("active", b.dataset.tab === name);
+  for (const tab of document.querySelectorAll(".tab")) tab.classList.toggle("active", tab.id === name);
+}
+async function openConversation(id) {
+  selected = id;
+  const data = await api("/api/conversation?client=" + encodeURIComponent(id));
+  const person = state.conversations.find(c => c.id === id);
+  $("conversation-title").textContent = customerName(data.client) + " · " + data.client.phone;
+  const box = $("thread"); box.replaceChildren();
+  for (const m of data.messages) {
+    const bubble = node("div", undefined, "bubble " + m.direction);
+    bubble.dir = "auto";
+    bubble.append(node("small", m.direction === "in" ? "Customer" : m.agent === "staff" ? "Staff" : "Assistant"), document.createTextNode(m.body));
+    box.append(bubble);
+  }
+  if (!data.messages.length) box.append(node("p", "No messages yet.", "muted"));
+  box.scrollTop = box.scrollHeight;
+  $("reply-form").hidden = false;
+  $("release").hidden = !person?.handoff_id;
+  $("release").onclick = person?.handoff_id ? () => act("/api/close-handoff", { id: person.handoff_id }) : null;
+  renderPeople();
+}
+function renderPeople() {
+  const box = $("people"); box.replaceChildren();
+  $("inbox-count").textContent = "(" + state.conversations.length + ")";
+  for (const c of state.conversations) {
+    const b = node("button", undefined, "person" + (c.id === selected ? " selected" : ""));
+    b.type = "button";
+    b.append(node("b", customerName(c)), node("span", c.last_message || ""));
+    if (c.handoff_id) b.append(node("span", "Staff owns this chat", "pill warn"));
+    b.onclick = () => openConversation(c.id).catch(e => error(e.message));
+    box.append(b);
+  }
+  if (!state.conversations.length) box.append(node("p", "No conversations yet.", "panel-body muted"));
+}
+function renderRequests() {
+  const box = $("requests"); box.replaceChildren();
+  for (const r of state.requests) {
+    const card = node("div", undefined, "card");
+    card.append(node("h3", customerName(r) + " · " + r.type.replaceAll("_", " ")));
+    card.append(node("p", serviceName(r.service_id) + (r.preferred_time ? " · requested " + r.preferred_time : "")));
+    card.append(node("span", r.status, "pill" + (r.status === "pending" ? " warn" : "")));
+    if (r.status === "pending") {
+      const row = node("div", undefined, "row");
+      const reply = node("button", "Reply"); reply.onclick = () => { showTab("inbox"); openConversation(r.client_id).catch(e => error(e.message)); };
+      row.append(reply);
+      if (r.type === "new") {
+        const choice = node("select");
+        const placeholder = node("option", "Choose available slot"); placeholder.value = ""; choice.append(placeholder);
+        for (const s of state.slots.filter(s => s.status === "available" && (!r.service_id || s.service_id === r.service_id))) {
+          const o = node("option", serviceName(s.service_id) + " · " + s.starts_at.replace("T", " "));
+          o.value = s.id; choice.append(o);
+        }
+        const confirm = node("button", "Record booking", "primary");
+        confirm.onclick = () => choice.value ? act("/api/confirm-booking", { requestId: r.id, slotId: Number(choice.value) }) : error("Choose an available slot first");
+        row.append(choice, confirm);
+      }
+      const done = node("button", "Mark handled"); done.onclick = () => act("/api/resolve-request", { id: r.id, status: "done" });
+      const decline = node("button", "Decline"); decline.onclick = () => act("/api/resolve-request", { id: r.id, status: "declined" });
+      row.append(done, decline); card.append(row);
+    }
+    box.append(card);
+  }
+  if (!state.requests.length) box.append(node("p", "No booking requests yet.", "muted"));
+  const appointments = $("appointments"); appointments.replaceChildren();
+  for (const a of state.appointments) {
+    const tr = node("tr");
+    for (const value of [customerName(a), serviceName(a.service_id), a.starts_at.replace("T", " "), a.ends_at.replace("T", " ")]) tr.append(node("td", value));
+    appointments.append(tr);
+  }
+  if (!state.appointments.length) { const tr = node("tr"); const td = node("td", "No appointments recorded yet.", "muted"); td.colSpan = 4; tr.append(td); appointments.append(tr); }
+}
+function renderSlots() {
+  const select = $("slot-service"); const prior = select.value; select.replaceChildren();
+  for (const s of state.services) { const option = node("option", s.name_en); option.value = s.id; select.append(option); }
+  if (prior) select.value = prior;
+  const box = $("slots"); box.replaceChildren();
+  for (const s of state.slots) {
+    const tr = node("tr");
+    for (const value of [serviceName(s.service_id), s.starts_at.replace("T", " "), s.ends_at.replace("T", " "), s.status]) tr.append(node("td", value));
+    const td = node("td");
+    if (s.status === "available") { const remove = node("button", "Remove"); remove.onclick = () => act("/api/remove-slot", { id: s.id }); td.append(remove); }
+    tr.append(td); box.append(tr);
+  }
+  if (!state.slots.length) { const tr = node("tr"); const td = node("td", "No availability entered yet.", "muted"); td.colSpan = 5; tr.append(td); box.append(tr); }
+}
+function renderPrices() {
+  const box = $("prices"); box.replaceChildren();
+  for (const s of state.services) {
+    const tr = node("tr"); tr.append(node("td", s.name_en), node("td", s.duration_min + " min"));
+    const td = node("td"); const form = node("form", undefined, "price-form");
+    const input = node("input"); input.type = "number"; input.min = "0"; input.max = "1000000"; input.step = "0.01"; input.value = s.price_aed; input.required = true; input.setAttribute("aria-label", s.name_en + " price in AED");
+    const save = node("button", "Save"); save.type = "submit";
+    form.append(input, save); form.onsubmit = e => { e.preventDefault(); act("/api/price", { serviceId: s.id, price: Number(input.value) }); };
+    td.append(form); tr.append(td); box.append(tr);
+  }
+}
+function render(data) {
+  state = data;
+  $("salon").textContent = data.salon;
+  $("timezone").textContent = "Salon time: " + data.timezone;
+  renderPeople(); renderRequests(); renderSlots(); renderPrices();
+  if (selected && !data.conversations.some(c => c.id === selected)) selected = null;
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+$("refresh").onclick = async () => { try { render(await api("/api/state")); if (selected) await openConversation(selected); error(""); } catch (e) { error(e.message); } };
+$("reply-form").onsubmit = async e => { e.preventDefault(); if (!selected) return; const text = $("reply-text").value; await act("/api/reply", { clientId: selected, text }); if (!$("error").textContent) $("reply-text").value = ""; };
+$("slot-form").onsubmit = async e => { e.preventDefault(); await act("/api/slot", { serviceId: $("slot-service").value, start: $("slot-start").value, end: $("slot-end").value }); if (!$("error").textContent) e.target.reset(); };
+api("/api/state").then(render).catch(e => error(e.message));
+</script>
+</body>
+</html>

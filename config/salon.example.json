@@ -1,0 +1,35 @@
+{
+  "name": "Noor Beauty Lounge (sample)",
+  "location": "Al Reem Island, Abu Dhabi (sample)",
+  "timezone": "Asia/Dubai",
+  "hours": "Saturday to Thursday 10:00-21:00, Friday 14:00-21:00",
+  "booking_link": "https://example.com/book/noor-sample",
+  "booking_mode": "link_and_staff_request",
+  "default_interval_days": 56,
+  "policies": [
+    "Cancellations need 24 hours notice.",
+    "Walk-ins are accepted only when a slot is free."
+  ],
+  "services": [
+    { "id": "womens_cut", "name_en": "Women's haircut", "name_ar": "قص شعر نسائي", "price_aed": 150, "duration_min": 60, "interval_days": 49, "aliases": ["haircut", "hair cut", "cut"] },
+    { "id": "root_colour", "name_en": "Root colour", "name_ar": "صبغة الجذور", "price_aed": 280, "duration_min": 90, "interval_days": 35, "aliases": ["roots", "root color", "colour", "color"] },
+    { "id": "keratin", "name_en": "Keratin treatment", "name_ar": "علاج الكيراتين", "price_aed": 750, "duration_min": 180, "interval_days": 120, "aliases": ["keratin"] },
+    { "id": "gel_nails", "name_en": "Gel manicure", "name_ar": "مناكير جل", "price_aed": 120, "duration_min": 45, "interval_days": 21, "aliases": ["gel", "manicure", "nails"] },
+    { "id": "facial", "name_en": "Hydrating facial", "name_ar": "جلسة ترطيب للوجه", "price_aed": 320, "duration_min": 60, "interval_days": 42, "aliases": ["facial"] }
+  ],
+  "campaign": {
+    "control_ratio": 0.2,
+    "overdue_multiplier": 1.25,
+    "max_days_lapsed": 365,
+    "contact_cooldown_days": 30,
+    "attribution_window_days": 30,
+    "send_window": { "start_hour": 10, "end_hour": 20 },
+    "aed_per_marketing_message": 0.1832
+  },
+  "templates": {
+    "winback": {
+      "en": { "name": "rebook_winback_en", "language": "en", "preview": "Hi {{1}}, it's Noor Beauty Lounge. Your {{2}} is usually due around now. Book here: {{3}}. Reply STOP to opt out." },
+      "ar": { "name": "rebook_winback_ar", "language": "ar", "preview": "مرحباً {{1}}، معك نور بيوتي لاونج. حان موعد {{2}} المعتاد. للحجز: {{3}}. للإلغاء أرسل STOP." }
+    }
+  }
+}
