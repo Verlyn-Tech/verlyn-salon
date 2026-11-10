@@ -8,6 +8,8 @@ import { ConsoleChannel } from "../src/channels/types.ts";
 import { parseWebhook, verifySignature, WhatsAppChannel } from "../src/channels/whatsapp.ts";
 import { openDb } from "../src/db.ts";
 import { NOW, profile, ScriptedLLM } from "./helpers.ts";
+import { createStaffHandler } from "../src/staff/server.ts";
+import { StubLLM } from "../src/llm/stub.ts";
 
 const SECRET = "app-secret";
 const sign = (body: string) => `sha256=${createHmac("sha256", SECRET).update(body).digest("hex")}`;
@@ -96,4 +98,110 @@ test("WhatsApp send payloads match the Cloud API shape", async () => {
 
 test("live sending refuses to start without credentials", () => {
   assert.throws(() => new WhatsAppChannel({ token: "", phoneNumberId: "", graphVersion: "v23.0" }));
+});
+
+test("credential checking reads the account without sending or putting the token in the URL", async () => {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const channel = new WhatsAppChannel({ token: "private-test-token", phoneNumberId: "123", graphVersion: "v23.0",
+    fetchImpl: (async (url, init) => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ id: "123", display_phone_number: "+971500000001", verified_name: "Test salon" }));
+    }) as typeof fetch,
+  });
+  assert.equal((await channel.checkConnection()).id, "123");
+  assert.equal(calls.length, 1);
+  assert.ok(!calls[0]!.url.includes("private-test-token"));
+  assert.ok(!calls[0]!.url.includes("/messages"));
+  assert.equal(calls[0]!.init?.body, undefined);
+});
+
+test("only the configured business phone number is processed and original timestamps are kept", () => {
+  const body = { entry: [{ changes: [{ value: { metadata: { phone_number_id: "123" }, messages: [
+    { from: "971500000001", id: "m1", type: "text", text: { body: "hi" }, timestamp: "1794038400" },
+  ] } }] }] };
+  assert.equal(parseWebhook(body, "999").length, 0);
+  assert.equal(parseWebhook(body, "123")[0]?.sentAt, new Date(1794038400 * 1000).toISOString());
+  assert.equal(verifySignature(Buffer.from("hello"), sign("hello") + "garbage", SECRET), false);
+});
+
+async function integrated(t: TestContext) {
+  const db = openDb();
+  const sent: any[] = [];
+  const network = { fail: false };
+  const channel = new WhatsAppChannel({ token: "private-test-token", phoneNumberId: "123", graphVersion: "v23.0",
+    fetchImpl: (async (_url, init) => {
+      if (network.fail) return new Response(JSON.stringify({ error: { code: 190, message: "private-test-token" } }), { status: 401 });
+      sent.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ messages: [{ id: `wamid.${sent.length}` }] }));
+    }) as typeof fetch,
+  });
+  const webhook = createWebhookHandler({ db, profile, channel, llm: new StubLLM(), now: () => new Date() }, {
+    verifyToken: "verify-me", appSecret: SECRET, phoneNumberId: "123",
+  });
+  const staff = createStaffHandler({ db, profile, channel, basePath: "/staff", runExclusive: webhook.runExclusive });
+  const server = createServer((req, res) => void (req.url?.startsWith("/staff") ? staff(req, res) : webhook(req, res)));
+  await new Promise<void>(r => server.listen(0, "127.0.0.1", r));
+  t.after(async () => { await webhook.idle(); await new Promise<void>(r => server.close(() => r())); db.close(); });
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const receive = async (id: string, text: string) => {
+    const body = JSON.stringify({ entry: [{ changes: [{ value: { metadata: { phone_number_id: "123" }, messages: [
+      { from: "971501112222", id, type: "text", text: { body: text } },
+    ] } }] }] });
+    const response = await fetch(base + "/webhook", { method: "POST", body, headers: { "x-hub-signature-256": sign(body) } });
+    assert.equal(response.status, 200);
+    await webhook.idle();
+  };
+  const post = (path: string, body: object) => fetch(base + "/staff/api/" + path, {
+    method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" },
+  });
+  return { db, sent, network, base, receive, post, webhook };
+}
+
+test("signed WhatsApp messages and real-channel staff replies share one inbox and preserve handoff ownership", async t => {
+  const { db, sent, base, receive, post } = await integrated(t);
+  await receive("customer-1", "I got a rash after my colour");
+  const state = await (await fetch(base + "/staff/api/state")).json() as any;
+  assert.equal(state.channel, "whatsapp");
+  assert.equal(state.conversations.length, 1);
+  const clientId = state.conversations[0].id;
+  const reply = await post("reply", { clientId, text: "Reception here, I can help." });
+  assert.equal(reply.status, 200);
+  assert.equal(sent.at(-1).to, "971501112222");
+  assert.equal(sent.at(-1).text.body, "Reception here, I can help.");
+  const count = sent.length;
+  await receive("customer-2", "Thanks");
+  assert.equal(sent.length, count);
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM messages WHERE agent = 'staff'").get()?.n, 1);
+});
+
+test("expired reply windows and Meta send failures cannot create a falsely sent staff reply", async t => {
+  const { db, sent, network, receive, post } = await integrated(t);
+  await receive("customer-1", "I need a refund");
+  const clientId = String(db.prepare("SELECT id FROM clients LIMIT 1").get()!.id);
+  const count = sent.length;
+  db.prepare("UPDATE messages SET at = ? WHERE direction = 'in'").run(new Date(Date.now() - 25 * 3600_000).toISOString());
+  assert.equal((await post("reply", { clientId, text: "Hello" })).status, 409);
+  assert.equal(sent.length, count);
+  db.prepare("UPDATE messages SET at = ? WHERE direction = 'in'").run(new Date().toISOString());
+  network.fail = true;
+  const failed = await post("reply", { clientId, text: "Hello" });
+  assert.equal(failed.status, 502);
+  assert.ok(!(await failed.text()).includes("private-test-token"));
+  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM messages WHERE agent = 'staff'").get()?.n, 0);
+});
+
+test("staff sending waits for the active inbound turn", async t => {
+  const { db, sent, receive, post, webhook } = await integrated(t);
+  await receive("customer-1", "I need a refund");
+  const clientId = String(db.prepare("SELECT id FROM clients LIMIT 1").get()!.id);
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const active = webhook.runExclusive(() => gate);
+  const response = post("reply", { clientId, text: "A reply after the current turn" });
+  const count = sent.length;
+  assert.equal(sent.length, count);
+  release();
+  await active;
+  assert.equal((await response).status, 200);
+  assert.equal(sent.at(-1).text.body, "A reply after the current turn");
 });

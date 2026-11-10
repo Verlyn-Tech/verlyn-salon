@@ -8,6 +8,7 @@ const MAX_BODY = 1_000_000;
 export interface WebhookOptions {
   verifyToken: string;
   appSecret: string;
+  phoneNumberId?: string;
 }
 
 function readBody(req: IncomingMessage): Promise<Buffer | null> {
@@ -32,6 +33,11 @@ export function createWebhookHandler(deps: Deps, options: WebhookOptions) {
   }
   // One at a time, so two quick messages from a customer can't race each other.
   let queue: Promise<unknown> = Promise.resolve();
+  function runExclusive<T>(task: () => Promise<T>): Promise<T> {
+    const result = queue.then(task);
+    queue = result.catch(() => {});
+    return result;
+  }
 
   const handler = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -73,11 +79,12 @@ export function createWebhookHandler(deps: Deps, options: WebhookOptions) {
     }
     // Acknowledge straight away. Model calls can be slow, and Meta retries slow webhooks.
     res.writeHead(200).end();
-    for (const message of parseWebhook(body)) {
-      queue = queue
-        .then(() => handleInbound(deps, message))
-        .catch((err) => audit(deps.db, deps.now(), null, "server", "turn_failed", { error: String(err) }));
+    for (const message of parseWebhook(body, options.phoneNumberId)) {
+      void runExclusive(async () => {
+        try { await handleInbound(deps, message); }
+        catch (err) { audit(deps.db, deps.now(), null, "server", "turn_failed", { error: String(err) }); }
+      });
     }
   };
-  return Object.assign(handler, { idle: () => queue });
+  return Object.assign(handler, { idle: () => queue, runExclusive });
 }

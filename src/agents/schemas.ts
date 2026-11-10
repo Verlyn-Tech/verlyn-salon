@@ -30,6 +30,8 @@ export const BookingOutput = z.object({
   service_id: z.string().nullable(),
   preferred_time: z.string().nullable(),
   needs_human: z.boolean(),
+  // Some models send ids as text; the orchestrator checks it against the real open slots.
+  slot_id: z.union([z.number(), z.string(), z.null()]).optional(),
 });
 
 export const RetentionOutput = z.object({

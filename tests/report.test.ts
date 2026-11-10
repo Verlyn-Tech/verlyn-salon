@@ -120,3 +120,14 @@ test("a campaign preview leaves no trace", async () => {
   db.exec("ROLLBACK");
   assert.equal((db.prepare("SELECT COUNT(*) AS n FROM campaign_assignments WHERE sent_at IS NOT NULL").get() as { n: number }).n, 0);
 });
+
+test("bookings confirmed in the staff dashboard count as coming back", async () => {
+  const db = await pilot(100, 0, 0);
+  const id = (db.prepare("SELECT client_id FROM campaign_assignments WHERE arm = 'treatment' LIMIT 1").get() as { client_id: string }).client_id;
+  db.prepare("INSERT INTO booking_requests (id, client_id, type, created_at) VALUES (1, ?, 'new', '2026-11-08')").run(id);
+  db.prepare("INSERT INTO availability_slots (id, service_id, starts_at, ends_at, status, created_at) VALUES (1, 'root_colour', '2026-11-20T15:00', '2026-11-20T17:00', 'booked', '2026-11-08')").run();
+  db.prepare("INSERT INTO appointments (client_id, request_id, slot_id, service_id, starts_at, ends_at, created_at) VALUES (?, 1, 1, 'root_colour', '2026-11-20T15:00', '2026-11-20T17:00', '2026-11-08')").run(id);
+  const r = computePilot(db, profile, "p", LATER);
+  assert.equal(r.treatment.rebooked, 1);
+  assert.equal(r.treatment.revenue, 0, "revenue waits for the completed visit");
+});

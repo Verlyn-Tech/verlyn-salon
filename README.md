@@ -35,10 +35,17 @@ the chat until **Close handoff and return to assistant** is clicked.
 
 The dashboard includes booking requests, recorded appointments, manually entered
 availability slots in the salon's timezone, and editable AED service prices.
-Record a new booking against an available slot to reserve it. **Mark handled**
-closes a request without creating an appointment; use it after handling a change
-or cancellation elsewhere. Recording a booking does not notify the customer;
-use the staff reply to communicate it. Pricing edits apply to new assistant turns.
+The agents see open slots for the next 14 days and offer them to customers. When a
+customer picks one, it shows on their booking request and is pre-selected, and it
+isn't offered to anyone else while the request is pending. Record a new booking
+against an available slot to reserve it, and the customer gets a confirmation in
+their language. On WhatsApp that only works within 24 hours of their last message;
+otherwise the booking is still saved and the dashboard tells you to contact them.
+**Mark entered** on an appointment records that it's also in your booking
+system (such as Fresha), since there is no API to add it there automatically.
+**Mark handled** closes a request without creating an appointment; use it after
+handling a change or cancellation elsewhere. Pricing edits apply to new assistant
+turns, and dashboard bookings count as "came back" in pilot reports.
 The test chat and its dashboard reset together and are erased on restart.
 
 For a persistent dashboard using the pilot's SQLite database:
@@ -49,9 +56,13 @@ npm run rebook -- dashboard
 
 Open http://localhost:3200. This uses `DB_PATH` (default `rebook.db`) and
 `SALON_PROFILE`, sharing the pilot's imported clients, messages and requests.
-`DASHBOARD_PORT` changes the port. It runs on this computer only; replies are saved
-and printed in the terminal. WhatsApp sending and an external calendar are not
-connected to the dashboard yet.
+`DASHBOARD_PORT` changes the port. Replies are saved and printed in the terminal;
+`whatsapp` mode runs the same dashboard with real sending.
+
+By default it only answers on this computer. To use it from another device, set
+`DASHBOARD_PASSWORD` (12+ characters) in `.env` and expose the dashboard port
+through an HTTPS tunnel. The browser then asks for a password; any username works.
+Never expose it over plain HTTP, because the password would travel unencrypted.
 
 ## How the agents work together
 
@@ -150,7 +161,7 @@ npm run rebook -- eval
 
 - Real WhatsApp traffic: the webhook and sender are only tested against mocks.
 - Voice notes: they go to staff. Groq lists Whisper speech-to-text models, which could change this, but that isn't built.
-- Direct booking: the system sends a link or a staff request. Check Fresha partner access separately.
+- Booking straight into Fresha: confirmed bookings still have to be entered there by hand. Check Fresha partner access separately.
 - Gyms: the first version is salons only.
-- Hosting the staff dashboard with staff authentication and live WhatsApp sending.
+- Staff accounts: the dashboard has one shared password, not per-person logins.
 - Hosting and database backups.

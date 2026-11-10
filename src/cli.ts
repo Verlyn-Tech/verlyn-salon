@@ -43,7 +43,9 @@ Run a pilot
   dashboard                    Local staff inbox, bookings, availability and pricing
 
 Go live
-  server [--dry]               WhatsApp webhook. --dry prints replies instead of sending
+  whatsapp check               Check Meta configuration and credentials without sending
+  whatsapp [--dry] [--stub]     WhatsApp webhook plus local staff dashboard
+  server [--dry] [--stub]       Alias for whatsapp
 `;
 
 function freeModels(db?: DB, verbose = false) {
@@ -66,6 +68,8 @@ function liveChannel(): WhatsAppChannel {
     graphVersion: process.env["WHATSAPP_GRAPH_VERSION"] ?? "v23.0",
   });
 }
+
+const dashboardPassword = () => process.env["DASHBOARD_PASSWORD"]?.trim() || undefined;
 
 const guardOn = () => process.env["GUARD_LLM"] !== "off";
 
@@ -171,7 +175,7 @@ async function main(): Promise<void> {
     case "dashboard": {
       const port = Number(process.env["DASHBOARD_PORT"] ?? 3200);
       const db = open();
-      const handler = createStaffHandler({ db, profile, channel: new ConsoleChannel() });
+      const handler = createStaffHandler({ db, profile, channel: new ConsoleChannel(), password: dashboardPassword() });
       createServer((req, res) => void handler(req, res)).listen(port, "127.0.0.1", () => {
         console.log(`Staff dashboard: http://localhost:${port}\nLocal dry run: replies are saved and printed here, not sent to WhatsApp.\nPress Ctrl+C to stop.`);
       });
@@ -283,23 +287,46 @@ async function main(): Promise<void> {
       console.log(r.changes ? "Closed. The assistant will answer this customer again." : "No open handoff with that id.");
       return;
     }
+    case "whatsapp":
     case "server": {
+      const required = ["WHATSAPP_TOKEN", "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_VERIFY_TOKEN", "WHATSAPP_APP_SECRET"] as const;
+      const missing = required.filter(key => !process.env[key]?.trim());
+      if (missing.length) {
+        console.log(`Add these values to .env: ${missing.join(", ")}\nUse the WhatsApp API setup screen in your Meta developer app. Keep tokens out of chat.`);
+        process.exitCode = 1;
+        return;
+      }
+      if (args[0] === "check") {
+        const account = await liveChannel().checkConnection();
+        console.log(`Meta account check passed: ${account.verified_name ?? "WhatsApp number"} (${account.display_phone_number}).\nNo message was sent. Configure the /webhook callback and subscribe to messages in Meta to receive chats.`);
+        return;
+      }
+      if (args.length) throw new Error("Usage: whatsapp [check] [--dry] [--stub]");
       const db = open();
+      const channel = values.dry ? new ConsoleChannel() : liveChannel();
       const deps: Deps = {
         db,
         profile,
-        llm: freeModels(db),
-        channel: values.dry ? new ConsoleChannel() : liveChannel(),
+        llm: values.stub ? new StubLLM() : freeModels(db),
+        channel,
         now: () => new Date(),
         guardLlm: guardOn(),
       };
       const handler = createWebhookHandler(deps, {
         verifyToken: process.env["WHATSAPP_VERIFY_TOKEN"] ?? "",
         appSecret: process.env["WHATSAPP_APP_SECRET"] ?? "",
+        phoneNumberId: process.env["WHATSAPP_PHONE_NUMBER_ID"]!,
       });
+      const dashboard = createStaffHandler({ db, profile, channel, runExclusive: handler.runExclusive, password: dashboardPassword() });
+      const dashboardPort = Number(process.env["DASHBOARD_PORT"] ?? 3200);
       const port = Number(process.env["PORT"] ?? 3000);
-      createServer((req, res) => void handler(req, res)).listen(port, () => {
+      if (dashboardPort === port) throw new Error("PORT and DASHBOARD_PORT must be different");
+      createServer((req, res) => void dashboard(req, res)).listen(dashboardPort, "127.0.0.1", () => {
+        console.log(`Staff dashboard: http://localhost:${dashboardPort}${values.dry ? " (dry run)" : " (WhatsApp replies enabled)"}`);
+      });
+      createServer((req, res) => void handler(req, res)).listen(port, "127.0.0.1", () => {
         console.log(`Webhook listening on port ${port}${values.dry ? " (dry run, nothing is sent)" : ""}`);
+        console.log(`Expose port ${port} through your HTTPS tunnel, then use https://<your-public-host>/webhook in Meta. ${dashboardPassword() ? "The dashboard has a password, so it can go through an HTTPS tunnel too." : "Keep the dashboard local, or set DASHBOARD_PASSWORD to use it remotely."}`);
       });
       return;
     }

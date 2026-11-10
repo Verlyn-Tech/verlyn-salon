@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 export interface Channel {
+  readonly mode?: "whatsapp" | "console";
   sendText(to: string, body: string): Promise<string>;
   sendTemplate(to: string, name: string, language: string, params: string[]): Promise<string>;
 }
 
 /** Prints instead of sending. The default everywhere except an explicit --live run. */
 export class ConsoleChannel implements Channel {
+  readonly mode = "console";
   sent: { to: string; body: string; template?: string }[] = [];
   #quiet: boolean;
 

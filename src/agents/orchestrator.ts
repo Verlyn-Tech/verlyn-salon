@@ -21,6 +21,7 @@ export interface InboundMessage {
   text: string;
   kind?: "text" | "other";
   providerId?: string;
+  sentAt?: string;
 }
 
 export interface Deps {
@@ -70,7 +71,24 @@ function findOrCreateClient(db: DB, phone: string, at: Date): ClientRow {
   return { id, first_name: null, language: "en" };
 }
 
-function buildContext(db: DB, client: ClientRow, text: string, messageId: number | bigint, at: Date): TurnContext {
+/** "YYYY-MM-DDTHH:MM" in the salon's time zone, the format staff enter slots in. */
+function salonTime(at: Date, timeZone: string): string {
+  return at.toLocaleString("sv-SE", { timeZone }).replace(" ", "T").slice(0, 16);
+}
+
+function buildContext(db: DB, client: ClientRow, text: string, messageId: number | bigint, at: Date, timeZone: string): TurnContext {
+  const openSlots = db
+    .prepare(
+      `SELECT id, service_id, starts_at FROM availability_slots
+       WHERE status = 'available' AND starts_at >= ? AND starts_at < ?
+         AND id NOT IN (SELECT slot_id FROM booking_requests WHERE status = 'pending' AND slot_id IS NOT NULL)
+       ORDER BY starts_at LIMIT 20`,
+    )
+    .all(salonTime(at, timeZone), salonTime(new Date(at.getTime() + 14 * 86_400_000), timeZone)) as Omit<TurnContext["openSlots"][number], "when" | "when_ar">[];
+  // Models get weekdays wrong when they work them out from dates, so code supplies them.
+  const format = { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "UTC" } as const;
+  const day = new Intl.DateTimeFormat("en-GB", format);
+  const dayAr = new Intl.DateTimeFormat("ar-AE-u-nu-latn", format);
   const rows = db
     .prepare(
       `SELECT direction, body FROM messages WHERE client_id = ? AND id < ? AND kind != 'template'
@@ -92,6 +110,10 @@ function buildContext(db: DB, client: ClientRow, text: string, messageId: number
     message: redact(text, client.first_name),
     isWinbackReply: Boolean(winback),
     lastService: winback?.service_label ?? null,
+    openSlots: openSlots.map((s) => {
+      const d = new Date(s.starts_at + "Z");
+      return { ...s, when: day.format(d), when_ar: dayAr.format(d) };
+    }),
   };
 }
 
@@ -118,7 +140,7 @@ export async function handleInbound(deps: Deps, msg: InboundMessage): Promise<Tu
   const kind = msg.kind ?? "text";
   const inserted = db
     .prepare("INSERT INTO messages (client_id, direction, body, kind, provider_id, at) VALUES (?, 'in', ?, ?, ?, ?)")
-    .run(client.id, msg.text, kind, msg.providerId ?? null, iso);
+    .run(client.id, msg.text, kind, msg.providerId ?? null, msg.sentAt && msg.sentAt < iso ? msg.sentAt : iso);
   const profileLang: "en" | "ar" = client.language === "ar" ? "ar" : "en";
   // Follow the language they just wrote in. A voice note has no text to go by.
   const lang: "en" | "ar" = kind !== "text" ? profileLang : hasArabic(msg.text) ? "ar" : "en";
@@ -182,7 +204,7 @@ export async function handleInbound(deps: Deps, msg: InboundMessage): Promise<Tu
   if (hard) return handoff(hard);
 
   // 2. Agents.
-  const ctx = buildContext(db, client, msg.text, inserted.lastInsertRowid, at);
+  const ctx = buildContext(db, client, msg.text, inserted.lastInsertRowid, at, profile.timezone);
   try {
     const route = track("router", await runRouter(llm, ctx));
     const replyLang = route.language === "ar" || route.language === "arabizi" ? "ar" : lang;
@@ -236,12 +258,15 @@ export async function handleInbound(deps: Deps, msg: InboundMessage): Promise<Tu
         r.action as "request_new" | "request_reschedule" | "request_cancel"
       ];
       if (type) {
-        // A service id the model invented is dropped rather than saved.
+        // A service or slot id the model invented is dropped rather than saved.
         const service = profile.services.some((s) => s.id === r.service_id) ? r.service_id : null;
+        const slot = type === "new" && r.slot_id != null
+          ? ctx.openSlots.find((s) => s.id === Number(r.slot_id) && (!service || s.service_id === service))
+          : undefined;
         commit = () => {
           db.prepare(
-            "INSERT INTO booking_requests (client_id, type, service_id, preferred_time, created_at) VALUES (?, ?, ?, ?, ?)",
-          ).run(client.id, type, service, r.preferred_time, iso);
+            "INSERT INTO booking_requests (client_id, type, service_id, preferred_time, slot_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+          ).run(client.id, type, service ?? slot?.service_id ?? null, r.preferred_time, slot?.id ?? null, iso);
         };
       }
     }

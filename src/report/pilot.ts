@@ -87,9 +87,13 @@ export function computePilot(db: DB, profile: SalonProfile, campaignId: string, 
       `SELECT status, amount_aed FROM visits
        WHERE client_id = ? AND visited_at >= ? AND visited_at <= ? AND status IN ('completed','booked')`,
     ).all(r.client_id, start, end) as unknown as { status: string; amount_aed: number }[];
+    // Bookings confirmed in the staff dashboard count too; revenue still comes from completed visits only.
+    const booked = db.prepare(
+      "SELECT 1 FROM appointments WHERE client_id = ? AND substr(starts_at, 1, 10) BETWEEN ? AND ? LIMIT 1",
+    ).get(r.client_id, start, end);
     const arm = arms[r.arm];
     arm.clients++;
-    if (visits.length) arm.rebooked++;
+    if (visits.length || booked) arm.rebooked++;
     arm.revenue += visits.filter((v) => v.status === "completed").reduce((sum, v) => sum + v.amount_aed, 0);
     if (r.arm === "treatment") {
       treatmentIds.push(r.client_id);

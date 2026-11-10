@@ -54,13 +54,13 @@ export function dashboardState(db: DB, profile: SalonProfile) {
       WHERE h.status = 'open' ORDER BY h.id DESC
     `).all(),
     requests: db.prepare(`
-      SELECT b.id, b.client_id, b.type, b.service_id, b.preferred_time, b.status, b.created_at,
+      SELECT b.id, b.client_id, b.type, b.service_id, b.preferred_time, b.slot_id, b.status, b.created_at,
         c.first_name, c.phone FROM booking_requests b JOIN clients c ON c.id = b.client_id
       ORDER BY b.id DESC LIMIT 100
     `).all(),
     slots: db.prepare("SELECT id, service_id, starts_at, ends_at, status FROM availability_slots ORDER BY starts_at, id LIMIT 500").all(),
     appointments: db.prepare(`
-      SELECT a.id, a.client_id, a.request_id, a.service_id, a.starts_at, a.ends_at,
+      SELECT a.id, a.client_id, a.request_id, a.service_id, a.starts_at, a.ends_at, a.external_entered_at,
         c.first_name, c.phone FROM appointments a JOIN clients c ON c.id = a.client_id
       ORDER BY a.starts_at DESC LIMIT 100
     `).all(),
@@ -149,7 +149,49 @@ export function resolveRequest(db: DB, value: unknown, status: unknown, now = ne
   audit(db, now, row.client_id, "staff", "request_resolved", { id: requestId, status });
 }
 
-export function confirmBooking(db: DB, requestValue: unknown, slotValue: unknown, now = new Date()): void {
+/** WhatsApp only allows free-text replies within 24 hours of the customer's last message. */
+export function replyWindowOpen(db: DB, clientId: string, now = new Date()): boolean {
+  const last = db.prepare("SELECT MAX(at) AS at FROM messages WHERE client_id = ? AND direction = 'in'").get(clientId) as { at: string | null };
+  return Boolean(last.at) && Number.isFinite(Date.parse(last.at!)) && now.getTime() - Date.parse(last.at!) < 86_400_000;
+}
+
+/** Tells the customer their booking is confirmed. The booking stands even if the message can't go out. */
+export async function notifyBookingConfirmed(db: DB, channel: Channel, profile: SalonProfile, appointmentId: number, now = new Date()): Promise<string> {
+  const a = db.prepare(`SELECT a.client_id, a.service_id, a.starts_at, c.phone, c.language
+    FROM appointments a JOIN clients c ON c.id = a.client_id WHERE a.id = ?`).get(appointmentId) as
+    { client_id: string; service_id: string; starts_at: string; phone: string; language: string };
+  if (channel.mode === "whatsapp" && !replyWindowOpen(db, a.client_id, now)) {
+    return "Booking recorded. The customer wasn't messaged because the 24-hour WhatsApp window is closed, so let them know another way.";
+  }
+  const ar = a.language === "ar";
+  const s = profile.services.find((x) => x.id === a.service_id);
+  // Slot times are salon local time, so format them as-is rather than converting.
+  const when = new Intl.DateTimeFormat(ar ? "ar-AE-u-nu-latn" : "en-GB", {
+    weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "UTC",
+  }).format(new Date(a.starts_at + "Z"));
+  const body = ar
+    ? `تم تأكيد موعد ${s?.name_ar ?? "خدمتك"} في ${profile.name} يوم ${when}. إذا أردت التغيير، راسلنا هنا.`
+    : `Your ${s?.name_en ?? "appointment"} at ${profile.name} is confirmed for ${when}. Reply here if you need to change it.`;
+  try {
+    const providerId = await channel.sendText(a.phone, body);
+    db.prepare("INSERT INTO messages (client_id, direction, body, kind, provider_id, agent, at) VALUES (?, 'out', ?, 'text', ?, 'booking_confirmation', ?)")
+      .run(a.client_id, body, providerId, now.toISOString());
+    audit(db, now, a.client_id, "staff", "booking_confirmation_sent", { appointment_id: appointmentId });
+    return "Booking recorded and the customer was sent a confirmation.";
+  } catch {
+    audit(db, now, a.client_id, "staff", "booking_confirmation_failed", { appointment_id: appointmentId });
+    return "Booking recorded, but the confirmation message couldn't be sent. Message the customer from the inbox.";
+  }
+}
+
+export function markEnteredElsewhere(db: DB, value: unknown, now = new Date()): void {
+  const appointmentId = id(value);
+  const r = db.prepare("UPDATE appointments SET external_entered_at = ? WHERE id = ? AND external_entered_at IS NULL").run(now.toISOString(), appointmentId);
+  if (!r.changes) throw new StaffError(404, "Appointment not found or already marked");
+  audit(db, now, null, "staff", "appointment_entered_elsewhere", { id: appointmentId });
+}
+
+export function confirmBooking(db: DB, requestValue: unknown, slotValue: unknown, now = new Date()): number {
   const requestId = id(requestValue);
   const slotId = id(slotValue);
   db.exec("BEGIN IMMEDIATE");
@@ -162,11 +204,12 @@ export function confirmBooking(db: DB, requestValue: unknown, slotValue: unknown
     if (!slot) throw new StaffError(404, "Available slot not found");
     if (request.service_id && request.service_id !== slot.service_id) throw new StaffError(400, "Slot service does not match the request");
     db.prepare("UPDATE availability_slots SET status = 'booked' WHERE id = ?").run(slotId);
-    db.prepare("INSERT INTO appointments (client_id, request_id, slot_id, service_id, starts_at, ends_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    const appointment = db.prepare("INSERT INTO appointments (client_id, request_id, slot_id, service_id, starts_at, ends_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(request.client_id, requestId, slotId, slot.service_id, slot.starts_at, slot.ends_at, now.toISOString());
     db.prepare("UPDATE booking_requests SET status = 'done' WHERE id = ?").run(requestId);
     audit(db, now, request.client_id, "staff", "booking_recorded", { request_id: requestId, slot_id: slotId });
     db.exec("COMMIT");
+    return Number(appointment.lastInsertRowid);
   } catch (err) {
     db.exec("ROLLBACK");
     throw err;

@@ -5,51 +5,55 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rebook staff dashboard</title>
 <style>
-:root { font: 14px/1.45 system-ui, "Segoe UI", Arial, sans-serif; color: #202924; background: #f2f4f0; }
+:root { font: 14px/1.45 system-ui, "Segoe UI", Arial, sans-serif; color: #171717; background: #f7f7f7; }
 * { box-sizing: border-box; }
-body { margin: 0; }
+:focus-visible { outline: 2px solid #737373; outline-offset: 3px; }
+input { accent-color: #111111; }
+body { margin: 0; display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; min-height: 100vh; }
 button, input, select, textarea { font: inherit; }
-button { cursor: pointer; border: 1px solid #ccd7ce; background: white; border-radius: 7px; padding: 7px 11px; color: #24372c; }
-button:hover { border-color: #087352; }
+button { cursor: pointer; border: 1px solid #d4d4d4; background: white; border-radius: 7px; padding: 7px 11px; color: #171717; }
+button:hover { border-color: #111111; }
 button:disabled { opacity: .5; cursor: default; }
-button.primary { background: #087352; border-color: #087352; color: white; font-weight: 600; }
-input, select, textarea { border: 1px solid #ccd7ce; border-radius: 7px; padding: 7px 9px; background: white; color: #202924; min-width: 0; }
+button.primary { background: #111111; border-color: #111111; color: white; font-weight: 600; }
+input, select, textarea { border: 1px solid #d4d4d4; border-radius: 7px; padding: 7px 9px; background: white; color: #171717; min-width: 0; }
 textarea { resize: vertical; width: 100%; }
-label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 12px; color: #4b5d51; }
-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 22px; background: #123c2c; color: white; }
+label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 12px; color: #525252; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 22px; background: #ffffff; color: #111111; border-bottom: 1px solid #e5e5e5; grid-column: 2; grid-row: 1; }
 header h1 { margin: 0; font-size: 20px; }
-header small { color: #b8d2c2; font-size: 12px; }
-nav { display: flex; gap: 6px; padding: 10px 22px; background: white; border-bottom: 1px solid #dce4dc; overflow-x: auto; }
-nav button { border: 0; border-radius: 6px; white-space: nowrap; }
-nav button.active { background: #dbefe3; color: #075a3f; font-weight: 700; }
-main { padding: 18px 22px 36px; max-width: 1440px; margin: auto; }
-.notice { padding: 9px 22px; color: #704a05; background: #fff0c8; }
-#error { color: #a12525; background: #ffe2df; }
+header small { color: #737373; font-size: 12px; }
+nav { display: flex; flex-direction: column; gap: 8px; padding: 30px 16px; background: #111111; grid-column: 1; grid-row: 1 / 5; position: sticky; top: 0; height: 100vh; align-self: start; }
+nav::before { content: 'REBOOK'; color: white; font-size: 18px; font-weight: 750; letter-spacing: .14em; padding: 0 12px 28px; }
+nav button { border: 1px solid transparent; border-radius: 7px; white-space: nowrap; text-align: left; background: transparent; color: #bdbdbd; padding: 11px 12px; }
+nav button:hover { border-color: #737373; color: white; }
+nav button.active { background: #ffffff; color: #111111; font-weight: 700; }
+main { padding: 24px 26px 36px; width: 100%; min-width: 0; grid-column: 2; grid-row: 4; }
+.notice { grid-column: 2; padding: 9px 22px; color: #404040; background: #ededed; }
+#error { color: #111111; background: #dedede; }
 [hidden] { display: none !important; }
 .tab { display: none; }
 .tab.active { display: block; }
 .layout { display: grid; grid-template-columns: minmax(240px, 340px) minmax(0, 1fr); gap: 16px; min-height: 65vh; }
-.panel { background: white; border: 1px solid #dae3da; border-radius: 11px; overflow: hidden; }
-.panel h2 { margin: 0; padding: 13px 15px; border-bottom: 1px solid #e4eae4; font-size: 16px; }
+.panel { background: white; border: 1px solid #dedede; border-radius: 11px; overflow: hidden; }
+.panel h2 { margin: 0; padding: 13px 15px; border-bottom: 1px solid #e5e5e5; font-size: 16px; }
 .panel-body { padding: 15px; }
-.muted { color: #617267; }
+.muted { color: #666666; }
 .list { max-height: 68vh; overflow: auto; }
-.person { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid #edf1ed; border-radius: 0; padding: 12px 15px; }
-.person.selected { background: #e1f2e8; }
+.person { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid #ededed; border-radius: 0; padding: 12px 15px; }
+.person.selected { background: #e8e8e8; }
 .person b, .person span { display: block; }
-.person span { color: #65766a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pill { display: inline-block; border-radius: 99px; padding: 2px 7px; font-size: 11px; font-weight: 700; background: #e1f2e8; color: #086a4a; }
-.pill.warn { background: #fff0ca; color: #815705; }
-.thread { display: flex; flex-direction: column; gap: 8px; min-height: 250px; max-height: 48vh; overflow: auto; padding: 15px; background: #f6f8f4; }
+.person span { color: #666666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pill { display: inline-block; border-radius: 99px; padding: 2px 7px; font-size: 11px; font-weight: 700; background: #e8e8e8; color: #262626; }
+.pill.warn { background: #d4d4d4; color: #171717; }
+.thread { display: flex; flex-direction: column; gap: 8px; min-height: 250px; max-height: 48vh; overflow: auto; padding: 15px; background: #f5f5f5; }
 .bubble { max-width: 80%; align-self: flex-start; padding: 8px 11px; border-radius: 10px; background: white; white-space: pre-wrap; overflow-wrap: anywhere; }
-.bubble.in { align-self: flex-end; background: #d8efe1; }
-.bubble small { display: block; color: #66766c; margin-bottom: 3px; }
-.reply { display: flex; flex-direction: column; gap: 8px; padding: 15px; border-top: 1px solid #e4eae4; }
+.bubble.in { align-self: flex-end; background: #dedede; }
+.bubble small { display: block; color: #666666; margin-bottom: 3px; }
+.reply { display: flex; flex-direction: column; gap: 8px; padding: 15px; border-top: 1px solid #e5e5e5; }
 .row { display: flex; flex-wrap: wrap; align-items: end; gap: 9px; }
 .row > label { min-width: 160px; }
 .row > button { align-self: end; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-.card { border: 1px solid #dde5dd; border-radius: 9px; padding: 13px; background: white; display: flex; flex-direction: column; gap: 8px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.card { border: 1px solid #dedede; border-radius: 9px; padding: 13px; background: white; display: flex; flex-direction: column; gap: 8px; }
 .card h3 { margin: 0; font-size: 15px; }
 .card p { margin: 0; }
 .card .row { margin-top: auto; }
@@ -57,17 +61,19 @@ main { padding: 18px 22px 36px; max-width: 1440px; margin: auto; }
 .section-heading { margin: 0 0 10px; font-size: 18px; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 9px 11px; border-bottom: 1px solid #e7ece7; }
-th { color: #5a6c5e; font-size: 12px; }
+th, td { text-align: left; padding: 9px 11px; border-bottom: 1px solid #e5e5e5; }
+th { color: #525252; font-size: 12px; }
 .price-form { display: flex; align-items: center; gap: 8px; }
 .price-form input { width: 110px; }
-@media (max-width: 800px) { .layout { grid-template-columns: 1fr; } .list { max-height: 230px; } main { padding: 12px; } header, nav, .notice { padding-left: 12px; padding-right: 12px; } }
+@media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } .list { max-height: 230px; } }
+@media (max-width: 700px) { body { grid-template-columns: 126px minmax(0, 1fr); } nav { padding: 22px 8px; } nav::before { font-size: 13px; padding: 0 8px 22px; } nav button { font-size: 12px; padding: 10px 8px; } main { padding: 14px 12px; } header, .notice { padding-left: 12px; padding-right: 12px; } .row > label { min-width: 0; width: 100%; } .bubble { max-width: 95%; } }
 </style>
 </head>
 <body>
 <header><div><h1>Staff dashboard</h1><small id="salon"></small></div><span id="timezone"></span><button type="button" id="refresh">Refresh</button></header>
-<div class="notice">Local dry run: replies are saved here and printed in the terminal. WhatsApp sending is not connected yet.</div>
+<div class="notice" id="connection-notice">Local dry run: replies are saved here and printed in the terminal. WhatsApp sending is not connected yet.</div>
 <div class="notice" id="error" role="alert" hidden></div>
+<div class="notice" id="done" role="status" hidden></div>
 <nav aria-label="Dashboard sections">
   <button type="button" class="active" data-tab="inbox">Inbox</button>
   <button type="button" data-tab="bookings">Bookings</button>
@@ -91,7 +97,7 @@ th { color: #5a6c5e; font-size: 12px; }
   <section class="tab" id="bookings">
     <div class="stack">
       <div><h2 class="section-heading">Booking requests</h2><div class="cards" id="requests"></div></div>
-      <div><h2 class="section-heading">Recorded appointments</h2><div class="panel table-wrap"><table><thead><tr><th>Customer</th><th>Service</th><th>Starts</th><th>Ends</th></tr></thead><tbody id="appointments"></tbody></table></div></div>
+      <div><h2 class="section-heading">Recorded appointments</h2><div class="panel table-wrap"><table><thead><tr><th>Customer</th><th>Service</th><th>Starts</th><th>Ends</th><th>In your booking system</th></tr></thead><tbody id="appointments"></tbody></table></div></div>
     </div>
   </section>
   <section class="tab" id="availability">
@@ -128,7 +134,13 @@ async function act(path, body) {
   if (pending) return;
   pending = true;
   error("");
-  try { render(await api(path, body)); if (selected) await openConversation(selected); }
+  $("done").hidden = true;
+  try {
+    const data = await api(path, body);
+    render(data);
+    if (data.notice) { $("done").textContent = data.notice; $("done").hidden = false; }
+    if (selected) await openConversation(selected);
+  }
   catch (e) { error(e.message); }
   finally { pending = false; }
 }
@@ -176,6 +188,8 @@ function renderRequests() {
     const card = node("div", undefined, "card");
     card.append(node("h3", customerName(r) + " · " + r.type.replaceAll("_", " ")));
     card.append(node("p", serviceName(r.service_id) + (r.preferred_time ? " · requested " + r.preferred_time : "")));
+    const picked = r.slot_id && state.slots.find(s => s.id === r.slot_id);
+    if (r.slot_id) card.append(node("p", picked ? "Customer picked: " + picked.starts_at.replace("T", " ") : "Customer picked a slot that is no longer available"));
     card.append(node("span", r.status, "pill" + (r.status === "pending" ? " warn" : "")));
     if (r.status === "pending") {
       const row = node("div", undefined, "row");
@@ -188,6 +202,7 @@ function renderRequests() {
           const o = node("option", serviceName(s.service_id) + " · " + s.starts_at.replace("T", " "));
           o.value = s.id; choice.append(o);
         }
+        if (picked && picked.status === "available") choice.value = String(picked.id);
         const confirm = node("button", "Record booking", "primary");
         confirm.onclick = () => choice.value ? act("/api/confirm-booking", { requestId: r.id, slotId: Number(choice.value) }) : error("Choose an available slot first");
         row.append(choice, confirm);
@@ -203,9 +218,13 @@ function renderRequests() {
   for (const a of state.appointments) {
     const tr = node("tr");
     for (const value of [customerName(a), serviceName(a.service_id), a.starts_at.replace("T", " "), a.ends_at.replace("T", " ")]) tr.append(node("td", value));
+    const entered = node("td");
+    if (a.external_entered_at) entered.textContent = "Entered " + a.external_entered_at.slice(0, 10);
+    else { const mark = node("button", "Mark entered"); mark.onclick = () => act("/api/mark-entered", { id: a.id }); entered.append(mark); }
+    tr.append(entered);
     appointments.append(tr);
   }
-  if (!state.appointments.length) { const tr = node("tr"); const td = node("td", "No appointments recorded yet.", "muted"); td.colSpan = 4; tr.append(td); appointments.append(tr); }
+  if (!state.appointments.length) { const tr = node("tr"); const td = node("td", "No appointments recorded yet.", "muted"); td.colSpan = 5; tr.append(td); appointments.append(tr); }
 }
 function renderSlots() {
   const select = $("slot-service"); const prior = select.value; select.replaceChildren();
@@ -236,6 +255,9 @@ function render(data) {
   state = data;
   $("salon").textContent = data.salon;
   $("timezone").textContent = "Salon time: " + data.timezone;
+  $("connection-notice").textContent = data.channel === "whatsapp"
+    ? "WhatsApp mode: staff replies go through Meta. Replies are available within 24 hours of the customer's latest message. API acceptance does not confirm delivery."
+    : "Local dry run: replies are saved here and printed in the terminal. WhatsApp sending is not connected yet.";
   renderPeople(); renderRequests(); renderSlots(); renderPrices();
   if (selected && !data.conversations.some(c => c.id === selected)) selected = null;
 }
@@ -244,6 +266,16 @@ $("refresh").onclick = async () => { try { render(await api("/api/state")); if (
 $("reply-form").onsubmit = async e => { e.preventDefault(); if (!selected) return; const text = $("reply-text").value; await act("/api/reply", { clientId: selected, text }); if (!$("error").textContent) $("reply-text").value = ""; };
 $("slot-form").onsubmit = async e => { e.preventDefault(); await act("/api/slot", { serviceId: $("slot-service").value, start: $("slot-start").value, end: $("slot-end").value }); if (!$("error").textContent) e.target.reset(); };
 api("/api/state").then(render).catch(e => error(e.message));
+setInterval(async () => {
+  if (document.hidden || pending || !state || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "")) return;
+  try {
+    const latest = await api("/api/state");
+    state = latest;
+    renderPeople();
+    if (selected && $("inbox").classList.contains("active")) await openConversation(selected);
+    if ($("bookings").classList.contains("active")) renderRequests();
+  } catch { /* Keep the current conversation visible during a temporary outage. */ }
+}, 5000);
 </script>
 </body>
 </html>

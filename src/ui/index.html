@@ -6,18 +6,13 @@
 <title>Rebook test page</title>
 <style>
 :root {
-  color-scheme: light dark;
-  --bg: #f3f4f1; --panel: #ffffff; --ink: #1c2321; --muted: #5d6a66; --line: #dde2de;
-  --accent: #0b6e5f; --accent-ink: #ffffff; --in: #ffffff; --out: #d9f2e6; --chat: #e9ece6;
-  --ok: #0b6e5f; --ok-bg: #d9f2e6; --warn: #8a5a00; --warn-bg: #fdefc8; --bad: #a32a2a; --bad-bg: #fbe0dd; --info-bg: #e6ebf7; --info: #2f4a8a;
+  color-scheme: light;
+  --bg: #f5f5f5; --panel: #ffffff; --ink: #171717; --muted: #666666; --line: #dedede;
+  --accent: #111111; --accent-ink: #ffffff; --in: #ffffff; --out: #dedede; --chat: #eeeeee;
+  --ok: #171717; --ok-bg: #e5e5e5; --warn: #262626; --warn-bg: #dedede; --bad: #ffffff; --bad-bg: #262626; --info-bg: #eeeeee; --info: #404040;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111614; --panel: #1a211e; --ink: #e8ece9; --muted: #9aa8a3; --line: #2d3733;
-    --accent: #38b39c; --accent-ink: #06201b; --in: #232c29; --out: #174238; --chat: #151b18;
-    --ok: #63d2bb; --ok-bg: #173b33; --warn: #f0c566; --warn-bg: #3d2f10; --bad: #f19a92; --bad-bg: #452019; --info-bg: #1f2a44; --info: #a9bdf0;
-  }
-}
+a { color: #171717; text-underline-offset: 3px; }
+input { accent-color: #111111; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, "Segoe UI", Tahoma, Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; }
 button, select, textarea { font: inherit; color: inherit; }

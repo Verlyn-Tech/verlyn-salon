@@ -114,6 +114,14 @@ export function openDb(path = ":memory:"): DB {
   const db = new DatabaseSync(path);
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec(SCHEMA);
+  // Columns added after the first release; existing database files get them here.
+  for (const [table, column, type] of [
+    ["booking_requests", "slot_id", "INTEGER REFERENCES availability_slots(id)"],
+    ["appointments", "external_entered_at", "TEXT"],
+  ] as const) {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!columns.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
   return db;
 }
 
